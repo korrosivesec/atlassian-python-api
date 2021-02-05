@@ -7,9 +7,7 @@ class BranchRestrictions(BitbucketCloudBase):
     def __init__(self, url, *args, **kwargs):
         super(BranchRestrictions, self).__init__(url, *args, **kwargs)
 
-    def _get_object(self, data):
-        if "errors" in data:
-            return
+    def __get_object(self, data):
         return BranchRestriction(data, **self._new_session_args)
 
     def create(
@@ -25,6 +23,7 @@ class BranchRestrictions(BitbucketCloudBase):
         """
         Add a new branch restriction.
 
+        :param value:
         :param kind: string: One of require_tasks_to_be_completed, force, restrict_merges,
                              enforce_merge_checks, require_approvals_to_merge, delete,
                              require_all_dependencies_merged, push, require_passing_builds_to_merge,
@@ -41,6 +40,8 @@ class BranchRestrictions(BitbucketCloudBase):
                              Minimal: {"owner": {"username": "<teamname>"}, "slug": "<groupslug>"}
 
         :return: The created BranchRestriction object
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/repositories/%7Bworkspace%7D/%7Brepo_slug%7D/branch-restrictions#post
         """
         if branch_match_kind == "branching_model":
             branch_pattern = ""
@@ -63,7 +64,7 @@ class BranchRestrictions(BitbucketCloudBase):
         if value is not None:
             data["value"] = value
 
-        return self._get_object(self.post(None, data=data))
+        return self.__get_object(self.post(None, data=data))
 
     def each(self, kind=None, pattern=None, q=None, sort=None):
         """
@@ -77,6 +78,8 @@ class BranchRestrictions(BitbucketCloudBase):
                              See https://developer.atlassian.com/bitbucket/api/2/reference/meta/filtering for details.
 
         :return: A generator for the BranchRestriction objects
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/repositories/%7Bworkspace%7D/%7Brepo_slug%7D/branch-restrictions#get
         """
         params = {}
         if kind is not None:
@@ -88,7 +91,7 @@ class BranchRestrictions(BitbucketCloudBase):
         if q is not None:
             params["q"] = q
         for branch_restriction in self._get_paged(None, params=params):
-            yield self._get_object(branch_restriction)
+            yield self.__get_object(branch_restriction)
 
         return
 
@@ -99,56 +102,74 @@ class BranchRestrictions(BitbucketCloudBase):
         :param id: string: The requested issue ID
 
         :return: The requested BranchRestriction objects
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/repositories/%7Bworkspace%7D/%7Brepo_slug%7D/branch-restrictions/%7Bid%7D#get
         """
-        return self._get_object(super(BranchRestrictions, self).get(id))
+        return self.__get_object(super(BranchRestrictions, self).get(id))
 
 
 class BranchRestriction(BitbucketCloudBase):
     def __init__(self, data, *args, **kwargs):
         super(BranchRestriction, self).__init__(None, *args, data=data, expected_type="branchrestriction", **kwargs)
 
+    def update(self, **kwargs):
+        """
+        Update the branch restriction properties. Fields not present in the request body are ignored.
+
+        :param kwargs: dict: The data to update.
+
+        :return: The updated branch restriction
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/repositories/%7Bworkspace%7D/%7Brepo_slug%7D/branch-restrictions/%7Bid%7D#put
+        """
+        return self._update_data(self.put(None, data=kwargs))
+
+    def delete(self):
+        """
+        Delete the branch restriction.
+
+        :return: The response on success
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/repositories/%7Bworkspace%7D/%7Brepo_slug%7D/branch-restrictions/%7Bid%7D#delete
+        """
+        return super(BranchRestriction, self).delete(None)
+
     @property
     def id(self):
+        """ The branch restriction id """
         return str(self.get_data("id"))
 
     @property
     def kind(self):
+        """ The branch restriction kind """
         return self.get_data("kind")
 
     @property
     def branch_match_kindstring(self):
+        """ The branch restriction match kindstring """
         return self.get_data("branch_match_kindstring")
 
     @property
     def branch_typestring(self):
+        """ The branch restriction typestring """
         return self.get_data("branch_typestring")
 
     @property
     def pattern(self):
+        """ The branch restriction pattern """
         return self.get_data("pattern")
 
     @property
     def users(self):
+        """ The branch restriction users """
         return self.get_data("users")
 
     @property
     def groups(self):
+        """ The branch restriction groups """
         return self.get_data("groups")
 
     @property
     def value(self):
+        """ The branch restriction value """
         return self.get_data("value")
-
-    def update(self, **kwargs):
-        """
-        Updates an existing branch restriction rule.
-        Fields not present in the request body are ignored.
-        """
-        self.__data = super(BranchRestriction, self).put(self.url, absolute=True, data=kwargs)
-        return self
-
-    def delete(self):
-        """
-        Deletes the branch restriction
-        """
-        return super(BranchRestriction, self).delete(self.url, absolute=True)

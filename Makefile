@@ -4,9 +4,10 @@
 
 PYTHON_VERSION ?= 3.7
 
-
 QA_CONTAINER ?= atlassian-python-api-qa-$(PYTHON_VERSION)
 TEST_OPTS ?=
+
+LINTING_TARGETS := atlassian/ examples/ tests/
 
 .PHONY: help setup-dev qa lint test doc docker-qa docker-qa-build
 
@@ -37,9 +38,10 @@ tox:
 	tox
 
 docker-qa: export TEST_OPTS := $(TEST_OPTS)
+docker-qa: export PYTHONDONTWRITEBYTECODE := 1
 
 docker-qa: | docker-qa-build
-	docker run --rm -e TEST_OPTS -v `pwd`:/atlassian-python-api $(QA_CONTAINER)
+	docker run --rm -e TEST_OPTS -e PYTHONDONTWRITEBYTECODE -v `pwd`:/atlassian-python-api $(QA_CONTAINER)
 
 docker-qa-build: Dockerfile.qa requirements.txt requirements-dev.txt
 	docker build \

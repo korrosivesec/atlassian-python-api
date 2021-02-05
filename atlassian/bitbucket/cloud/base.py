@@ -7,23 +7,47 @@ class BitbucketCloudBase(BitbucketBase):
     def __init__(self, url, *args, **kwargs):
         """
         Init the rest api wrapper
-        :param url:       The base url used for the rest api.
-        :param *args:     The fixed arguments for the AtlassianRestApi.
-        :param **kwargs:  The fixed arguments for the AtlassianRestApi.
+
+        :param url: string:    The base url used for the rest api.
+        :param *args: list:    The fixed arguments for the AtlassianRestApi.
+        :param **kwargs: dict: The keyword arguments for the AtlassianRestApi.
 
         :return: nothing
         """
+        expected_type = kwargs.pop("expected_type", None)
         super(BitbucketCloudBase, self).__init__(url, *args, **kwargs)
+        if expected_type is not None and not expected_type == self.get_data("type"):
+            raise ValueError("Expected type of data is [{}], got [{}].".format(expected_type, self.get_data("type")))
 
-    def _get_paged(self, url, params={}, data=None, flags=None, trailing=None, absolute=False):
+    def get_link(self, link):
+        """
+        Get a link from the data.
+
+        :param link: string: The link identifier
+
+        :return: The requested link or None if it isn't present
+        """
+        links = self.get_data("links")
+        if links is None or link not in links:
+            return None
+        return links[link]["href"]
+
+    def _get_paged(self, url, params=None, data=None, flags=None, trailing=None, absolute=False):
         """
         Used to get the paged data
-        :param url:       The url to retrieve.
-        :param params:    The parameters (optional).
-        :param data:      The data (optional).
 
-        :return: nothing
+        :param url: string:                        The url to retrieve
+        :param params: dict (default is None):     The parameters
+        :param data: dict (default is None):       The data
+        :param flags: string[] (default is None):  The flags
+        :param trailing: bool (default is None):   If True, a trailing slash is added to the url
+        :param absolute: bool (default is False):  If True, the url is used absolute and not relative to the root
+
+        :return: A generator object for the data elements
         """
+
+        if params is None:
+            params = {}
 
         while True:
             response = super(BitbucketCloudBase, self).get(

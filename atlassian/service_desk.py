@@ -377,33 +377,37 @@ class ServiceDesk(AtlassianRestAPI):
 
         return self.delete(url, headers=self.experimental_headers)
 
-    def add_users_to_organization(self, organization_id, users_list):
+    def add_users_to_organization(self, organization_id, users_list=[], account_list=[]):
         """
         Adds users to an organization
         users_list is a list of strings
+        account_list is a list of accountIds
 
+        :param account_list:
         :param organization_id: str
         :param users_list: list
         :return:
         """
         log.warning("Adding users...")
         url = "rest/servicedeskapi/organization/{}/user".format(organization_id)
-        data = {"usernames": users_list}
+        data = {"usernames": users_list, "accountIds": account_list}
 
         return self.post(url, headers=self.experimental_headers, data=data)
 
-    def remove_users_from_organization(self, organization_id, users_list):
+    def remove_users_from_organization(self, organization_id, users_list=[], account_list=[]):
         """
         Removes users from an organization
         users_list is a list of strings
+        account_list is a list of accountIds
 
         :param organization_id: str
         :param users_list: list
+        :param account_list: list
         :return:
         """
         log.warning("Removing users...")
         url = "rest/servicedeskapi/organization/{}/user".format(organization_id)
-        data = {"usernames": users_list}
+        data = {"usernames": users_list, "accountIds": account_list}
 
         return self.delete(url, headers=self.experimental_headers, data=data)
 
@@ -462,10 +466,14 @@ class ServiceDesk(AtlassianRestAPI):
         """
         url = "rest/servicedeskapi/servicedesk/{}/attachTemporaryFile".format(service_desk_id)
 
+        # no application/json content type and an additional X-Atlassian-Token header
+        # https://docs.atlassian.com/jira-servicedesk/REST/4.14.1/#servicedeskapi/servicedesk/{serviceDeskId}/attachTemporaryFile-attachTemporaryFile
+        experimental_headers = self.experimental_headers.copy()
+        del experimental_headers["Content-Type"]
+        experimental_headers["X-Atlassian-Token"] = "no-check"
+
         with open(filename, "rb") as file:
-            result = self.post(path=url, headers=self.experimental_headers, files={"file": file}).get(
-                "temporaryAttachments"
-            )
+            result = self.post(path=url, headers=experimental_headers, files={"file": file}).get("temporaryAttachments")
             temp_attachment_id = result[0].get("temporaryAttachmentId")
 
             return temp_attachment_id
@@ -597,7 +605,33 @@ class ServiceDesk(AtlassianRestAPI):
 
         return self.get(url, headers=self.experimental_headers)
 
-    def add_customers(self, service_desk_id, list_of_usernames):
+    def get_customers(self, service_desk_id, query=None, start=0, limit=50):
+        """
+        Returns a list of the customers on a service desk.
+
+        The returned list of customers can be filtered using the query parameter.
+        The parameter is matched against customers' displayName, name, or email.
+        For example, searching for "John", "Jo", "Smi", or "Smith" will match a
+        user with display name "John Smith"..
+
+        :param query:
+        :param start:
+        :param limit:
+        :param service_desk_id: str
+        :return: the customers added to the service desk
+        """
+        url = "rest/servicedeskapi/servicedesk/{}/customer".format(service_desk_id)
+        params = {}
+        if start is not None:
+            params["start"] = int(start)
+        if limit is not None:
+            params["limit"] = int(limit)
+        if query is not None:
+            params["query"] = query
+
+        return self.get(url, headers=self.experimental_headers, params=params)
+
+    def add_customers(self, service_desk_id, list_of_usernames=[], list_of_accountids=[]):
         """
         Adds one or more existing customers to the given service desk.
         If you need to create a customer, see Create customer method.
@@ -607,12 +641,32 @@ class ServiceDesk(AtlassianRestAPI):
 
         :param service_desk_id: str
         :param list_of_usernames: list
+        :param list_of_accountids: list
         :return: the customers added to the service desk
         """
         url = "rest/servicedeskapi/servicedesk/{}/customer".format(service_desk_id)
-        data = {"usernames": list_of_usernames}
+        data = {"usernames": list_of_usernames, "accountIds": list_of_accountids}
 
+        log.info("Adding customers...")
         return self.post(url, headers=self.experimental_headers, data=data)
+
+    def remove_customers(self, service_desk_id, list_of_usernames=[], list_of_accountids=[]):
+        """
+        Removes one or more customers from a service desk. The service
+        desk must have closed access. If any of the passed customers are
+        not associated with the service desk, no changes will be made for
+        those customers and the resource returns a 204 success code.
+
+        :param service_desk_id: str
+        :param list_of_usernames: list
+        :param list_of_accountids: list
+        :return: the customers added to the service desk
+        """
+        url = "rest/servicedeskapi/servicedesk/{}/customer".format(service_desk_id)
+        data = {"usernames": list_of_usernames, "accountIds": list_of_accountids}
+
+        log.info("Removing customers...")
+        return self.delete(url, headers=self.experimental_headers, data=data)
 
     def get_queues(self, service_desk_id, include_count=False, start=0, limit=50):
         """
@@ -681,3 +735,31 @@ class ServiceDesk(AtlassianRestAPI):
         ).headers["upm-token"]
         url = "rest/plugins/1.0/?token={upm_token}".format(upm_token=upm_token)
         return self.post(url, files=files, headers=self.no_check_headers)
+
+    def create_request_type(
+        self,
+        service_desk_id,
+        request_type_id,
+        request_name,
+        request_description,
+        request_help_text,
+    ):
+        """
+        Creating a request type
+        :param request_type_id:
+        :param request_help_text:
+        :param service_desk_id: str
+        :param request_name: str
+        :param request_description: str
+        """
+        log.warning("Creating request type...")
+        data = {
+            "issueTypeId": request_type_id,
+            "name": request_name,
+            "description": request_description,
+            "helpText": request_help_text,
+        }
+
+        url = "rest/servicedeskapi/servicedesk/{}/requesttype".format(service_desk_id)
+
+        return self.post(url, headers=self.experimental_headers, data=data)

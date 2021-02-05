@@ -22,7 +22,7 @@ Manage projects
     bitbucket.project_users(key, limit=99999, filter_str=None)
 
     # Get project administrators for project
-    butbucket.project_users_with_administrator_permissions(key)
+    bitbucket.project_users_with_administrator_permissions(key)
 
     # Get Project Groups
     bitbucket.project_groups(key, limit=99999, filter_str=None)
@@ -46,6 +46,9 @@ Manage repositories
 
     # Get single repository
     bitbucket.get_repo(project_key, repository_slug)
+
+    # Update single repository
+    bitbucket.update_repo(project_key, repository_slug, description="Repo description")
 
     # Get labels for a single repository
     bitbucket.get_repo_labels(project_key, repository_slug)
@@ -199,7 +202,7 @@ Branch permissions
     # Set branches permissions
     bitbucket.set_branches_permissions(project_key, multiple_permissions=False, matcher_type=None, matcher_value=None, permission_type=None, repository=None, except_users=[], except_groups=[], except_access_keys=[], start=0, limit=25)
 
-    # Delete a single branch permission by premission id
+    # Delete a single branch permission by permission id
     bitbucket.delete_branch_permission(project_key, permission_id, repository=None)
 
     # Get a single branch permission by permission id
@@ -274,7 +277,7 @@ Pipelines management
 
     # Object oriented:
         # Get the repository first
-        r = cloud.workspaces.get(worksppace).repositories.get(repository)
+        r = cloud.workspaces.get(workspace).repositories.get(repository)
 
         # Get all Pipelines results for repository
         r.pipelines.each()
@@ -344,7 +347,7 @@ Manage issues
 
     # Object oriented:
         # Get the repository first
-        r = cloud.workspaces.get(worksppace).repositories.get(repository)
+        r = cloud.workspaces.get(workspace).repositories.get(repository)
 
         # Get all tracked issues
         r.issues.each()

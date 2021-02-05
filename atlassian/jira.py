@@ -278,6 +278,46 @@ class Jira(AtlassianRestAPI):
         url = "rest/api/2/cluster/node/{}/offline".format(node_id)
         return self.put(url)
 
+    def get_cluster_alive_nodes(self):
+        """
+        Get cluster nodes where alive = True
+        :return: list of node dicts
+        """
+        return [_ for _ in self.get_cluster_all_nodes() if _["alive"]]
+
+    """
+    Troubleshooting. (Available for DC) It gives the posibility to download support zips.
+    Reference: https://confluence.atlassian.com/support/create-a-support-zip-using-the-rest-api-in-data-center-applications-952054641.html
+    """
+
+    def generate_support_zip_on_nodes(self, node_ids):
+        """
+        Generate a support zip on targeted nodes of a cluster
+        :param node_ids: list
+        :return: dict representing cluster task created
+        """
+        data = {"nodeIds": node_ids}
+        url = "/rest/troubleshooting/latest/support-zip/cluster"
+        return self.post(url, data=data)
+
+    def check_support_zip_status(self, cluster_task_id):
+        """
+        Check status of support zip creation task
+        :param cluster_task_id: str
+        :return:
+        """
+        url = "/rest/troubleshooting/latest/support-zip/status/cluster/{}".format(cluster_task_id)
+        return self.get(url)
+
+    def download_support_zip(self, file_name):
+        """
+        Download created support zip file
+        :param file_name: str
+        :return: bytes of zip file
+        """
+        url = "/rest/troubleshooting/latest/support-zip/download/{}".format(file_name)
+        return self.get(url, advanced_mode=True).content
+
     """
     ZDU (Zero Downtime upgrade) module. (Available for DC)
     Reference: https://docs.atlassian.com/software/jira/docs/api/REST/8.5.0/#api/2/cluster/zdu
@@ -629,8 +669,11 @@ class Jira(AtlassianRestAPI):
     Reference: https://docs.atlassian.com/software/jira/docs/api/REST/8.5.0/#api/2/issue
     """
 
-    def issue(self, key, fields="*all"):
-        return self.get("rest/api/2/issue/{0}?fields={1}".format(key, fields))
+    def issue(self, key, fields="*all", expand=None):
+        params = {}
+        if expand:
+            params["expand"] = expand
+        return self.get("rest/api/2/issue/{0}?fields={1}".format(key, fields), params=params)
 
     def get_issue(self, issue_id_or_key, fields=None, properties=None, update_history=True):
         """
@@ -681,6 +724,13 @@ class Jira(AtlassianRestAPI):
                         issue_list.remove(key)
             query_result, missing_issues = self.bulk_issue(issue_list, fields)
         return query_result, missing_issues
+
+    def issue_createmeta(self, project, expand="projects.issuetypes.fields"):
+        params = {}
+        if expand:
+            params["expand"] = expand
+        url = "rest/api/2/issue/createmeta?projectKeys={}".format(project)
+        return self.get(url, params=params)
 
     def get_issue_changelog(self, issue_key):
         """
@@ -741,8 +791,11 @@ class Jira(AtlassianRestAPI):
         url = "rest/api/2/issue/{issueIdOrKey}/archive".format(issueIdOrKey=issue_id_or_key)
         return self.get(url)
 
-    def issue_field_value(self, key, field):
-        issue = self.get("rest/api/2/issue/{0}?fields={1}".format(key, field))
+    def issue_field_value(self, key, field, expand=None):
+        params = {}
+        if expand:
+            params["expand"] = expand
+        issue = self.get("rest/api/2/issue/{0}?fields={1}".format(key, field), params=params)
         return issue["fields"][field]
 
     def issue_fields(self, key):
@@ -872,11 +925,13 @@ class Jira(AtlassianRestAPI):
 
         return self.put(url, data=data)
 
-    def create_issue(self, fields, update_history=False):
+    def create_issue(self, fields, update_history=False, update=None):
         """
         Creates an issue or a sub-task from a JSON representation
         :param fields: JSON data
                 mandatory keys are issuetype, summary and project
+        :param update: JSON data
+                Use it to link issues or update worklog
         :param update_history: bool (if true then the user's project history is updated)
         :return:
             example:
@@ -884,10 +939,23 @@ class Jira(AtlassianRestAPI):
                               project = dict(key='APA'),
                               issuetype = dict(name='Story')
                               )
-                jira.create_issue(fields=fields)
+                update = dict(issuelinks={
+                    "add": {
+                        "type": {
+                            "name": "Child-Issue"
+                            },
+                        "inwardIssue": {
+                            "key": "ISSUE-KEY"
+                            }
+                        }
+                    }
+                )
+                jira.create_issue(fields=fields, update=update)
         """
         url = "rest/api/2/issue"
         data = {"fields": fields}
+        if update:
+            data["update"] = update
         params = {}
 
         if update_history is True:
@@ -1142,27 +1210,31 @@ class Jira(AtlassianRestAPI):
     Reference: https://docs.atlassian.com/software/jira/docs/api/REST/8.5.0/#api/2/user
     """
 
-    def user(self, username=None, key=None, expand=None):
+    def user(self, username=None, key=None, account_id=None, expand=None):
         """
         Returns a user. This resource cannot be accessed anonymously.
         You can use only one parameter: username or key
 
         :param username:
         :param key: if username and key are different
+        :param account_id:
         :param expand: Can be 'groups,applicationRoles'
         :return:
         """
         params = {}
+        major_parameter_enabled = False
+        if account_id:
+            params = {"accountId": account_id}
+            major_parameter_enabled = True
 
-        if username and not key:
+        if not major_parameter_enabled and username and not key:
             params = {"username": username}
-        elif not username and key:
+        elif not major_parameter_enabled and not username and key:
             params = {"key": key}
-        elif username and key:
+        elif not major_parameter_enabled and username and key:
             return "You cannot specify both the username and the key parameters"
-        elif not username and not key:
-            return "You must specify at least one parameter: username or key"
-
+        elif not account_id and not key and not username:
+            return "You must specify at least one parameter: username or key or account_id"
         if expand:
             params["expand"] = expand
 
@@ -1176,13 +1248,22 @@ class Jira(AtlassianRestAPI):
         """
         return self.user(username).get("active")
 
-    def user_remove(self, username):
+    def user_remove(self, username=None, account_id=None, key=None):
         """
         Remove user from Jira if this user does not have any activity
+        :param key:
+        :param account_id:
         :param username:
         :return:
         """
-        return self.delete("rest/api/2/user?username={0}".format(username))
+        params = {}
+        if username:
+            params["username"] = username
+        if account_id:
+            params["accountId"] = account_id
+        if key:
+            params["key"] = key
+        return self.delete("rest/api/2/user", params=params)
 
     def user_update(self, username, data):
         """
@@ -1313,7 +1394,7 @@ class Jira(AtlassianRestAPI):
         url="rest/scriptrunner/latest/custom/disableUser",
         param="userName",
     ):
-        """The disable method throw own rest enpoint"""
+        """The disable method throw own rest endpoint"""
         url = "{}?{}={}".format(url, param, username)
         return self.get(path=url)
 
@@ -1544,6 +1625,19 @@ class Jira(AtlassianRestAPI):
         }
         return self.post("rest/api/2/version", data=payload)
 
+    def delete_version(self, version, moved_fixed=None, move_affected=None):
+        """
+        Delete version from the project
+        :param int version: the version id to delete
+        :param int moved_fixed: The version to set fixVersion to on issues where the deleted version is the fix version.
+                                If null then the fixVersion is removed.
+        :param int move_affected: The version to set affectedVersion to on issues where the deleted version is
+                                  the affected version, If null then the affectedVersion is removed.
+        :return:
+        """
+        payload = {"moveFixIssuesTo": moved_fixed, "moveAffectedIssuesTo": move_affected}
+        return self.delete("rest/api/2/version/{}".format(version), data=payload)
+
     def get_project_roles(self, project_key):
         """
         Provide associated project roles
@@ -1751,6 +1845,12 @@ class Jira(AtlassianRestAPI):
             params["expand"] = expand
         return self.get(url, params=params)
 
+    def get_issue_types(self):
+        """
+        Return all issue types
+        """
+        return self.get("rest/api/2/issuetype")
+
     def create_issue_type(self, name, description="", type="standard"):
         """
         Create a new issue type
@@ -1813,10 +1913,9 @@ class Jira(AtlassianRestAPI):
                 fixed system limits. Default by built-in method: 50
         :return:
         """
-        url = "rest/api/2/user/assignable/search?project={project_key}&startAt={start}&maxResults={limit}".format(
-            project_key=project_key, start=start, limit=limit
-        )
-        return self.get(url)
+        params = {"project": project_key, "startAt": start, "maxResults": limit}
+        url = "rest/api/2/user/assignable/search"
+        return self.get(url, params=params)
 
     def get_assignable_users_for_issue(self, issue_key, username=None, start=0, limit=50):
         """
@@ -1828,11 +1927,10 @@ class Jira(AtlassianRestAPI):
                 fixed system limits. Default by built-in method: 50
         :return:
         """
-        url = "rest/api/2/user/assignable/search?issueKey={issue_key}&startAt={start}&maxResults={limit}".format(
-            issue_key=issue_key, start=start, limit=limit
-        )
+        params = {"issueKey": issue_key, "startAt": start, "maxResults": limit}
         if username:
-            url += "&username={username}".format(username=username)
+            params["username"] = username
+        url = "rest/api/2/user/assignable/search"
         return self.get(url)
 
     def get_status_id_from_name(self, status_name):
@@ -1848,7 +1946,6 @@ class Jira(AtlassianRestAPI):
         Returns all time tracking providers. By default, Jira only has one time tracking provider: JIRA provided time
         tracking. However, you can install other time tracking providers via apps from the Atlassian Marketplace.
         """
-
         url = "rest/api/3/configuration/timetracking/list"
         return self.get(url)
 
@@ -1857,7 +1954,6 @@ class Jira(AtlassianRestAPI):
         Returns the time tracking provider that is currently selected. Note that if time tracking is disabled,
         then a successful but empty response is returned.
         """
-
         url = "rest/api/3/configuration/timetracking"
         return self.get(url)
 
@@ -2121,17 +2217,25 @@ class Jira(AtlassianRestAPI):
             params["expand"] = expand
         return self.get("rest/api/2/search", params=params)
 
-    def csv(self, jql, limit=1000, all_fields=True):
+    def csv(self, jql, limit=1000, all_fields=True, start=None, delimiter=None):
         """
             Get issues from jql search result with ALL or CURRENT fields
             default will be to return all fields
         :param jql: JQL query
         :param limit: max results in the output file
         :param all_fields: To return all fields or current fields only
+        :param start: index value
+        :param delimiter:
         :return: CSV file
         """
 
-        params = {"tempMax": limit, "jqlQuery": jql}
+        params = {"jqlQuery": jql}
+        if limit:
+            params["tempMax"] = limit
+        if start:
+            params["pager/start"] = start
+        if delimiter:
+            params["delimiter"] = delimiter
         # fmt: off
         if all_fields:
             url = "sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv"
@@ -2143,6 +2247,64 @@ class Jira(AtlassianRestAPI):
             params=params,
             not_json_response=True,
             headers={"Accept": "application/csv"},
+        )
+
+    def excel(self, jql, limit=1000, all_fields=True, start=None):
+        """
+            Get issues from jql search result with ALL or CURRENT fields
+            default will be to return all fields
+        :param jql: JQL query
+        :param limit: max results in the output file
+        :param all_fields: To return all fields or current fields only
+        :param start: index value
+        :return: CSV file
+        """
+
+        params = {"jqlQuery": jql}
+        if limit:
+            params["tempMax"] = limit
+        if start:
+            params["pager/start"] = start
+        # fmt: off
+        if all_fields:
+            url = "sr/jira.issueviews:searchrequest-excel-all-fields/temp/SearchRequest.xls"
+        else:
+            url = "sr/jira.issueviews:searchrequest-excel-current-fields/temp/SearchRequest.xls"
+        # fmt: on
+        return self.get(
+            url,
+            params=params,
+            not_json_response=True,
+            headers={"Accept": "application/vnd.ms-excel"},
+        )
+
+    def export_html(self, jql, limit=None, all_fields=True, start=None):
+        """
+        Get issues from jql search result with ALL or CURRENT fields
+            default will be to return all fields
+        :param jql: JQL query
+        :param limit: max results in the output file
+        :param all_fields: To return all fields or current fields only
+        :param start: index value
+        :return: HTML file
+        """
+
+        params = {"jqlQuery": jql}
+        if limit:
+            params["tempMax"] = limit
+        if start:
+            params["pager/start"] = start
+        # fmt: off
+        if all_fields:
+            url = "sr/jira.issueviews:searchrequest-html-all-fields/temp/SearchRequest.html"
+        else:
+            url = "sr/jira.issueviews:searchrequest-html-current-fields/temp/SearchRequest.html"
+        # fmt: on
+        return self.get(
+            url,
+            params=params,
+            not_json_response=True,
+            headers={"Accept": "application/xhtml+xml"},
         )
 
     def get_all_priorities(self):
@@ -2179,6 +2341,7 @@ class Jira(AtlassianRestAPI):
         """
         Provide all workflows paginated (see https://developer.atlassian.com/cloud/jira/platform/rest/v2/\
 api-group-workflows/#api-rest-api-2-workflow-search-get)
+        :param expand:
         :param startAt: OPTIONAL The index of the first item to return in a page of results (page offset).
         :param maxResults: OPTIONAL The maximum number of items to return per page.
         :param workflowName: OPTIONAL The name of a workflow to return.
@@ -2347,7 +2510,6 @@ api-group-workflows/#api-rest-api-2-workflow-search-get)
         :return: list
         """
         url = "rest/api/2/project/{}/issuesecuritylevelscheme".format(project_id_or_key)
-        response = None
         try:
             response = self.get(url)
         except HTTPError as e:
@@ -2524,7 +2686,7 @@ api-group-workflows/#api-rest-api-2-workflow-search-get)
         Not relevant for foreground reindex, where changeHistory is always reindexed.
         :param worklogs: Indicates that changeHistory should also be reindexed.
         Not relevant for foreground reindex, where changeHistory is always reindexed.
-        :param indexing_type: OPTIONAL: The default value for the type is BACKGROUND_PREFFERED
+        :param indexing_type: OPTIONAL: The default value for the type is BACKGROUND_PREFERRED
         :return:
         """
         params = {}
@@ -2547,7 +2709,7 @@ api-group-workflows/#api-rest-api-2-workflow-search-get)
                    If Jira fails to finish the background reindexing, respond with 409 Conflict (error message).
         BACKGROUND_PREFERRED  - If possible do a background reindexing.
                    If it's not possible (due to an inconsistent index), do a foreground reindexing.
-        :param indexing_type: OPTIONAL: The default value for the type is BACKGROUND_PREFFERED
+        :param indexing_type: OPTIONAL: The default value for the type is BACKGROUND_PREFERRED
         :return:
         """
         return self.reindex(indexing_type=indexing_type)
@@ -2860,7 +3022,7 @@ api-group-workflows/#api-rest-api-2-workflow-search-get)
 
     def tempo_timesheets_get_team_utilization(self, team_id, date_from, date_to=None, group_by=None):
         """
-        GEt team utulization. Response in json
+        Get team utilization. Response in json
         :param team_id:
         :param date_from:
         :param date_to:

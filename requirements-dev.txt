@@ -1,5 +1,11 @@
 -r requirements.txt
-flake9
+mock
 pytest
-pylint
+pytest-cov
+flake8
+black
 tox
+coverage
+codecov
+# used for example confluence attach file
+python-magic

@@ -30,8 +30,11 @@ Mandatory conditions
 
 1. If you adding new method - add description to docs
 2. If you make changes in current methods - add changes to docs
+3. If you sent the PR, please validate via black_
 
 Please follow the code style in the docs.
+
+.. _black:  https://black.readthedocs.io/en/stable/editor_integration.html
 
 Connect on Chat for any queries
 ---------------------------------
@@ -80,6 +83,12 @@ The following command builds a package and uploads it to PIP repository.
 ::
 
    python setup.py sdist upload
+
+An alternative way you can use next command
+
+::
+
+   python3 -m pip install git+https://github.com/atlassian-api/atlassian-python-api.git
 
 
 References
@@ -134,10 +143,10 @@ In addition to all the contributors we would like to thank to these companies:
 
 * Atlassian_ for developing such a powerful ecosystem.
 * JetBrains_ for providing us with free licenses of PyCharm_
-* Travis_ for hosting our continuous integration
+* GitHub_ for hosting our repository and continuous integration
 * Insomnia_ for providing the human rest client easy to test the methods
 .. _Atlassian: https://www.atlassian.com/
 .. _JetBrains: http://www.jetbrains.com
 .. _PyCharm: http://www.jetbrains.com/pycharm/
-.. _Travis: https://travis-ci.org/
+.. _GitHub: https://github.com/
 .. _Insomnia: https://insomnia.rest/

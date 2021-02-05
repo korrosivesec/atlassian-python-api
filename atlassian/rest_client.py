@@ -4,7 +4,7 @@ from json import dumps
 
 import requests
 from oauthlib.oauth1 import SIGNATURE_RSA
-from requests_oauthlib import OAuth1
+from requests_oauthlib import OAuth1, OAuth2
 from six.moves.urllib.parse import urlencode
 
 from atlassian.request_utils import get_default_logger
@@ -39,12 +39,13 @@ class AtlassianRestAPI(object):
         url,
         username=None,
         password=None,
-        timeout=60,
+        timeout=75,
         api_root="rest/api",
         api_version="latest",
         verify_ssl=True,
         session=None,
         oauth=None,
+        oauth2=None,
         cookies=None,
         advanced_mode=None,
         kerberos=None,
@@ -70,6 +71,8 @@ class AtlassianRestAPI(object):
             self._create_basic_session(username, password)
         elif oauth is not None:
             self._create_oauth_session(oauth)
+        elif oauth2 is not None:
+            self._create_oauth2_session(oauth2)
         elif kerberos is not None:
             self._create_kerberos_session(kerberos)
         elif cookies is not None:
@@ -84,21 +87,10 @@ class AtlassianRestAPI(object):
     def _create_basic_session(self, username, password):
         self._session.auth = (username, password)
 
-    def _create_kerberos_session(self, kerberos_service):
-        try:
-            import kerberos as kerb
-        except ImportError as e:
-            log.debug(e)
-            try:
-                import kerberos_sspi as kerb
-            except ImportError:
-                raise ImportError("No kerberos implementation available")
-        __, krb_context = kerb.authGSSClientInit(kerberos_service)
-        kerb.authGSSClientStep(krb_context, "")
-        auth_header = "Negotiate " + kerb.authGSSClientResponse(krb_context)
-        self._update_header("Authorization", auth_header)
-        response = self._session.get(self.url, verify=self.verify_ssl)
-        response.raise_for_status()
+    def _create_kerberos_session(self, _):
+        from requests_kerberos import HTTPKerberosAuth, OPTIONAL
+
+        self._session.auth = HTTPKerberosAuth(mutual_authentication=OPTIONAL)
 
     def _create_oauth_session(self, oauth_dict):
         oauth = OAuth1(
@@ -108,6 +100,19 @@ class AtlassianRestAPI(object):
             resource_owner_key=oauth_dict["access_token"],
             resource_owner_secret=oauth_dict["access_token_secret"],
         )
+        self._session.auth = oauth
+
+    def _create_oauth2_session(self, oauth_dict):
+        """
+        Use OAuth 2.0 Authentication
+        :param oauth_dict: Dictionary containing access information. Must at
+            least contain "client_id" and "token". "token" is a dictionary and
+            must at least contain "access_token" and "token_type".
+        :return:
+        """
+        if "client" not in oauth_dict:
+            oauth_dict["client"] = None
+        oauth = OAuth2(oauth_dict["client_id"], oauth_dict["client"], oauth_dict["token"])
         self._session.auth = oauth
 
     def _update_header(self, key, value):
@@ -195,8 +200,11 @@ class AtlassianRestAPI(object):
         """
         url = self.url_joiner(None if absolute else self.url, path, trailing)
         params_already_in_url = True if "?" in url else False
-        if (params or flags) and not params_already_in_url:
-            url += "?"
+        if params or flags:
+            if params_already_in_url:
+                url += "&"
+            else:
+                url += "?"
         if params:
             url += urlencode(params or {})
         if flags:
@@ -221,7 +229,7 @@ class AtlassianRestAPI(object):
         response.encoding = "utf-8"
 
         log.debug("HTTP: {} {} -> {} {}".format(method, path, response.status_code, response.reason))
-
+        log.debug("HTTP: Response text -> {}".format(response.text))
         if self.advanced_mode:
             return response
 
@@ -286,7 +294,12 @@ class AtlassianRestAPI(object):
         params=None,
         trailing=None,
         absolute=False,
+        advanced_mode=False,
     ):
+        """
+        :param advanced_mode: bool, OPTIONAL: Return the raw response
+        :return: if advanced_mode is not set - returns dictionary. If it is set - returns raw response.
+        """
         response = self.request(
             "POST",
             path=path,
@@ -298,7 +311,7 @@ class AtlassianRestAPI(object):
             trailing=trailing,
             absolute=absolute,
         )
-        if self.advanced_mode:
+        if self.advanced_mode or advanced_mode:
             return response
         return self._response_handler(response)
 
@@ -311,7 +324,12 @@ class AtlassianRestAPI(object):
         trailing=None,
         params=None,
         absolute=False,
+        advanced_mode=False,
     ):
+        """
+        :param advanced_mode: bool, OPTIONAL: Return the raw response
+        :return: if advanced_mode is not set - returns dictionary. If it is set - returns raw response.
+        """
         response = self.request(
             "PUT",
             path=path,
@@ -322,7 +340,7 @@ class AtlassianRestAPI(object):
             trailing=trailing,
             absolute=absolute,
         )
-        if self.advanced_mode:
+        if self.advanced_mode or advanced_mode:
             return response
         return self._response_handler(response)
 
@@ -334,12 +352,15 @@ class AtlassianRestAPI(object):
         params=None,
         trailing=None,
         absolute=False,
+        advanced_mode=False,
     ):
         """
         Deletes resources at given paths.
+        :param advanced_mode: bool, OPTIONAL: Return the raw response
         :rtype: dict
         :return: Empty dictionary to have consistent interface.
         Some of Atlassian REST resources don't return any content.
+        If advanced_mode is set - returns raw response.
         """
         response = self.request(
             "DELETE",
@@ -350,6 +371,6 @@ class AtlassianRestAPI(object):
             trailing=trailing,
             absolute=absolute,
         )
-        if self.advanced_mode:
+        if self.advanced_mode or advanced_mode:
             return response
         return self._response_handler(response)

@@ -19,7 +19,11 @@ author = "SLRover"
 # The short X.Y version
 version = ""
 # The full version, including alpha/beta/rc tags
-release = "1.15.3"
+release = ""
+
+with open(os.path.join("../atlassian", "VERSION")) as file:
+    version = file.read().strip()
+    release = version
 
 # -- General configuration ---------------------------------------------------
 
@@ -67,7 +71,7 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "alibaster"
+html_theme = "alabaster"
 html_theme_options = {
     "rightsidebar": "false",
 }

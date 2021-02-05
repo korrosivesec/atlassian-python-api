@@ -2,9 +2,9 @@
 
 from textwrap import indent
 
-from atlassian.bitbucket.cloud import Cloud
+from atlassian.bitbucket import Cloud
 
-cloud = Cloud(url="http://localhost:7990", username="admin", password="admin")
+cloud = Cloud(url="https://api.bitbucket.org/", username="admin", password="admin")
 
 index = 0
 for w in cloud.workspaces.each():
@@ -17,7 +17,7 @@ for w in cloud.workspaces.each():
         break
 
 print()
-w = cloud.workspaces.get(w.name)
+w = cloud.workspaces.get(w.slug)
 p = w.projects.get(p.key)
 print("Project key " + p.key)
 for r in p.repositories.each():

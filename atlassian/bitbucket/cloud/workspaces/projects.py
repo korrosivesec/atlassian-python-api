@@ -9,9 +9,7 @@ class Projects(BitbucketCloudBase):
     def __init__(self, url, *args, **kwargs):
         super(Projects, self).__init__(url, *args, **kwargs)
 
-    def _get_object(self, data):
-        if "errors" in data:
-            return
+    def __get_object(self, data):
         return Project(data, **self._new_session_args)
 
     def create(self, name, key, description, is_private=True, avatar=None):
@@ -31,13 +29,15 @@ class Projects(BitbucketCloudBase):
                 is_private=False
             )
 
-        :param name: string: The name of the project.
-        :param key: string: The key of the project.
-        :param description: string: The description of the project.
-        :param is_private: boolean (True): True if it is a private project.
-        :param avatar: string (None): The avatar of the project.
+        :param name: string:                       The name of the project.
+        :param key: string:                        The key of the project.
+        :param description: string:                The description of the project.
+        :param is_private: bool (default is True): True if it is a private project.
+        :param avatar: string (default is None):   The avatar of the project.
 
         :return: The created project object
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/workspaces/%7Bworkspace%7D/projects#post
         """
         data = {
             "name": name,
@@ -45,18 +45,20 @@ class Projects(BitbucketCloudBase):
             "description": description,
             "is_private": is_private,
         }
-        return self._get_object(self.post(None, data=data))
+        return self.__get_object(self.post(None, data=data))
 
     def each(self, q=None, sort=None):
         """
-        Returns the list of projects in this workspace.
+        Get all projects in the workspace matching the criteria.
 
-        :param q: string: Query string to narrow down the response.
-                          See https://developer.atlassian.com/bitbucket/api/2/reference/meta/filtering for details.
-        :param sort: string: Name of a response property to sort results.
-                             See https://developer.atlassian.com/bitbucket/api/2/reference/meta/filtering for details.
+        :param q: string (default is None):    Query string to narrow down the response.
+                                               See https://developer.atlassian.com/bitbucket/api/2/reference/meta/filtering for details.
+        :param sort: string (default is None): Name of a response property to sort results.
+                                               See https://developer.atlassian.com/bitbucket/api/2/reference/meta/filtering for details.
 
         :return: A generator for the project objects
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/workspaces/%7Bworkspace%7D/projects#get
         """
         params = {}
         if sort is not None:
@@ -64,7 +66,7 @@ class Projects(BitbucketCloudBase):
         if q is not None:
             params["q"] = q
         for project in self._get_paged(None, params=params):
-            yield self._get_object(project)
+            yield self.__get_object(project)
 
         return
 
@@ -72,13 +74,13 @@ class Projects(BitbucketCloudBase):
         """
         Returns the requested project
 
-        :param project: string: The requested project.
-        :param by: string: How to interprate project, can be 'key' or 'name'.
+        :param project: string:               The requested project.
+        :param by: string (default is "key"): How to interprate project, can be 'key' or 'name'.
 
         :return: The requested Project object
         """
         if by == "key":
-            return self._get_object(super(Projects, self).get(project))
+            return self.__get_object(super(Projects, self).get(project))
         elif by == "name":
             for p in self.each():
                 if p.name == project:
@@ -99,62 +101,86 @@ class Project(BitbucketCloudBase):
             url = '{}/?q=project.key="{}"'.format(workspace["links"]["self"], workspace["slug"])
         self.__repositories = ProjectRepositories(url, **self._new_session_args)
 
-    @property
-    def repositories(self):
-        return self.__repositories
+    def update(self, **kwargs):
+        """
+        Update the project properties. Fields not present in the request body are ignored.
+
+        :param kwargs: dict: The data to update.
+
+        :return: The updated project
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/workspaces/%7Bworkspace%7D/projects/%7Bproject_key%7D#put
+        """
+        return self._update_data(self.put(None, data=kwargs))
+
+    def delete(self):
+        """
+        Delete the project.
+
+        :return: The response on success
+
+        API docs: https://developer.atlassian.com/bitbucket/api/2/reference/resource/workspaces/%7Bworkspace%7D/projects/%7Bproject_key%7D#delete
+        """
+        data = super(Project, self).delete(None)
+        if data is None or "errors" in data:
+            return
+        return data
 
     @property
     def name(self):
+        """ The project name """
         return self.get_data("name")
 
     @name.setter
     def name(self, name):
+        """ Setter for the project name """
         return self.update(name=name)
 
     @property
     def key(self):
+        """ The project key """
         return self.get_data("key")
 
     @key.setter
     def key(self, key):
+        """ Setter for the project key """
         return self.update(key=key)
 
     @property
     def description(self):
+        """ The project description """
         return self.get_data("description")
 
     @description.setter
     def description(self, description):
+        """ Setter for the project description """
         return self.update(description=description)
 
     @property
     def is_private(self):
+        """ The project private flag """
         return self.get_data("is_private")
 
     @is_private.setter
     def is_private(self, is_private):
+        """ Setter for the project private flag """
         return self.update(is_private=is_private)
 
     @property
     def created_on(self):
+        """ The project creation time """
         return self.get_data("created_on")
 
     @property
     def updated_on(self):
+        """ The project last update time """
         return self.get_data("updated_on", "never updated")
 
     def get_avatar(self):
+        """ The project avatar """
         return self.get(self.get_link("avatar"), absolute=True)
 
-    def update(self, **kwargs):
-        """
-        Update the project
-        """
-        self.__data = super(Project, self).put(self.url, absolute=True, data=kwargs)
-        return self
-
-    def delete(self):
-        """
-        Delete the project
-        """
-        return super(Project, self).delete(self.url, absolute=True)
+    @property
+    def repositories(self):
+        """ The project repositories """
+        return self.__repositories
